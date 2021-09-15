@@ -1,0 +1,69 @@
+apiVersion: argoproj.io/v1alpha1
+kind: CronWorkflow
+metadata:
+  name: cronwf-master
+  namespace: argo
+spec:
+  schedule: "0 10 * * *"
+  concurrencyPolicy: "Replace"
+  startingDeadlineSeconds: 0
+  workflowSpec:
+    entrypoint: dag-master
+    serviceAccountName: argo
+    volumes:
+    - name: exercise2-secret
+      secret:
+        secretName: exercise2-secret
+    templates:
+    - name: dag-master
+      dag:
+        tasks:
+          - name: detect-bomb
+            template: triggerWorkflow
+            arguments:
+              parameters:
+              - name: word-detect
+                value: "bomb"
+              - name: workflowtemplate
+                value: "wftmpl-exercise2"
+          - name: detect-attack
+            template: triggerWorkflow
+            arguments:
+              parameters:
+              - name: word-detect
+                value: "attack"
+              - name: workflowtemplate
+                value: "wftmpl-exercise2"
+          - name: detect-click
+            depends: detect-bomb.Succeeded && detect-attack.Succeeded
+            arguments:
+              parameters:
+              - name: word-detect
+                value: "click"
+            templateRef:
+              name: wftmpl-exercise2
+              template: dag-template
+    
+    - name: triggerWorkflow
+      inputs:
+        parameters:
+          - name: word-detect
+          - name: workflowtemplate
+      resource:
+        action: create
+        manifest: |
+          apiVersion: argoproj.io/v1alpha1
+          kind: Workflow
+          metadata:
+            generateName: {{inputs.parameters.workflowtemplate}}-{{inputs.parameters.word-detect}}-
+            namespace: argo
+          spec:
+            arguments:
+              paremeters:
+              - name: word-detect
+                value: {{inputs.parameters.word-detect}}
+            workflowTemplateRef:
+              name: {{inputs.parameters.workflowtemplate}}
+        successCondition: status.phase == Succeeded
+        failureCondition: status.phase in (Failed, Error)
+  

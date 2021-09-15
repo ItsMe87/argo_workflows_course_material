@@ -1,0 +1,47 @@
+# Please edit the object below. Lines beginning with a '#' will be ignored,
+# and an empty file will abort the edit. If an error occurs while saving this file will be
+# reopened with the relevant failures.
+#
+apiVersion: v1
+data:
+  artifactRepository: |
+    archiveLogs: true
+    s3:
+      bucket: argo-kurs-bucket
+      endpoint: s3.amazonaws.com
+      accessKeySecret:
+         name: aws-credentials-test
+        key: access_key_id
+      secretKeySecret:
+        aws-credentials-test
+        key: secret_access_key
+  links: |
+    - name: Example Workflow Link
+      scope: workflow
+      url: http://logging-facility?namespace=${metadata.namespace}&workflowName=${metadata.name}&startedAt=${status.startedAt}&finishedAt=${status.finishedAt}
+    - name: Example Pod Link
+      scope: pod
+      url: http://logging-facility?namespace=${metadata.namespace}&podName=${metadata.name}&startedAt=${status.startedAt}&finishedAt=${status.finishedAt}
+  metricsConfig: |
+    disableLegacy: true
+    enabled: true
+    path: /metrics
+    port: 9090
+  persistence: |
+    connectionPool:
+      maxIdleConns: 100
+      maxOpenConns: 0
+      connMaxLifetime: 0s
+    nodeStatusOffLoad: true
+    archive: true
+    archiveTTL: 7d
+    postgresql:
+      host: postgres
+      port: 5432
+      database: postgres
+      tableName: argo_workflows
+      userNameSecret:
+        name: argo-postgres-config
+        key: username
+      passwordSecret:
+        name: argo-postgres-config

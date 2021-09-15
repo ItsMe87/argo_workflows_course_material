@@ -1,0 +1,11 @@
+apiVersion: argoproj.io/v1alpha1
+kind: CronWorkflow
+metadata:
+  name: cronwf
+spec:
+  schedule: "* * * * *"
+  concurrencyPolicy: "Forbid"
+  startingDeadlineSeconds: 75
+  workflowSpec:
+    workflowTemplateRef:
+      name: wftmpl-dag

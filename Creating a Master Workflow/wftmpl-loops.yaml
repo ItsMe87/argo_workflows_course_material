@@ -1,0 +1,50 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: wftmpl-loop
+spec:
+  entrypoint: dag-template
+  arguments:
+    parameters:
+    - name: message1
+      value: Task 1 is executed
+    - name: message2
+      value: Task 2 is executed   
+  templates:
+  - name: dag-template
+    inputs:
+      parameters:
+      - name: message1
+      - name: message2
+    dag:
+      tasks:
+      - name: Task1
+        arguments:
+          parameters: [{name: text, value: "{{inputs.parameters.message1}}" }]
+        template: task-template
+      - name: Task2
+        arguments:
+          parameters: [{name: text, value: "{{inputs.parameters.message2}}" }]
+        template: task-template
+      - name: Task3
+        dependencies: [Task1]
+        template: task-template
+        arguments:
+          parameters: 
+          - name: text
+            value: "{{item}}"
+        withItems:
+        - Element1
+        - Element2
+        - Element3
+        
+  - name: task-template
+    inputs:
+      parameters:
+      - name: text
+    script:
+      image: python:3.8-slim
+      command: [python]
+      source: |
+        p = "{{inputs.parameters.text}}"
+        print(p)

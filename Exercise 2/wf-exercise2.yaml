@@ -1,0 +1,146 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  name: wf-exercise2
+spec:
+  entrypoint: dag-template
+  volumes:
+  - name: exercise2-secret
+    secret:
+      secretName: exercise2-secret
+  arguments:
+    parameters:
+    - name: word-detect
+      value: bomb
+  templates:
+  - name: dag-template
+    inputs:
+      parameters:
+      - name: word-detect
+    dag:
+      tasks:
+      - name: get-source
+        template: get-source-templ
+      - name: read-emails
+        depends: get-source.Succeeded
+        arguments:
+          artifacts: [{name: text, from: "{{tasks.get-source.outputs.artifacts.emails}}"}]
+        template: read-emails-templ
+      - name: loop
+        depends: read-emails.Succeeded
+        template: loop-templ
+        arguments:
+          parameters:
+          - name: text
+            value: "{{item.text}}"
+          - name: sender
+            value: "{{item.sender}}"
+          - name: word-detect
+            value: "{{inputs.parameters.word-detect}}"
+        withParam: "{{tasks.read-emails.outputs.result}}"
+  
+  - name: get-source-templ
+    script:
+      image: ubuntu:20.04
+      command: [sh]
+      source: |
+        apt-get update
+        apt-get install -y curl
+        mkdir source-file
+        cd source-file
+        curl $SOURCE_URL -o emails.csv
+        ls
+      env:
+      - name: SOURCE_URL
+        valueFrom:
+          secretKeyRef:
+            name: exercise2-secret
+            key: source_url
+    outputs:
+      artifacts:
+      - name: emails
+        path: /source-file/emails.csv
+
+  - name: read-emails-templ
+    inputs:
+      artifacts:
+      - name: text
+        path: /tmp/text
+    script:
+      image: python:3.8-slim
+      command: [python]
+      source: |
+        import json
+        import sys
+        with open("/tmp/text", "r") as f:
+           lines = f.readlines()
+           lines = [x.strip().split(";") for x in lines]
+           json.dump([{lines[0][0]: i[0].strip('"'), lines[0][1]: i[1]} for i in lines[1:]], sys.stdout)
+
+  - name: loop-templ
+    inputs:
+      parameters:
+      - name: text
+      - name: sender
+      - name: word-detect
+    dag:
+      tasks:
+      - name: detect
+        template: detect-templ
+        arguments:
+          parameters:
+          - name: text
+            value: "{{inputs.parameters.text}}"
+          - name: sender
+            value: "{{inputs.parameters.sender}}"
+          - name: word-detect
+            value: "{{inputs.parameters.word-detect}}"
+      - name: email-detected
+        depends: detect.Succeeded
+        when: "{{tasks.detect.outputs.result}} == DETECTED"
+        template: email-detected-templ
+        arguments:
+          parameters:
+          - name: text
+            value: "{{inputs.parameters.text}}"
+          - name: sender
+            value: "{{inputs.parameters.sender}}"
+        
+  - name: detect-templ
+    inputs:
+      parameters:
+      - name: text
+      - name: sender
+      - name: word-detect
+    script:
+      image: python:3.8-slim
+      command: [python]
+      source: |
+        if "{{inputs.parameters.word-detect}}" in "{{inputs.parameters.text}}": print("DETECTED")
+        else: print("OK")
+
+  - name: email-detected-templ
+    inputs:
+      parameters:
+      - name: text
+      - name: sender
+    script:
+      image: python:3.8-slim
+      command: [python]
+      source: |
+        with open("/secrets/notification_email", "r") as f:
+           notification_email = f.read()
+        print("Send notification email to ", notification_email, " with the content: ")
+        print("Sender: ", "{{inputs.parameters.sender}}}")
+        print("Text: ", "{{inputs.parameters.text}}}")
+        f = open("/tmp/email_detected.txt", "w")
+        f.write("Sender: {{inputs.parameters.sender}}}")
+        f.write("Text: {{inputs.parameters.text}}}")
+        f.close()
+      volumeMounts:
+      - name: exercise2-secret
+        mountPath: "/secrets"
+    outputs:
+      artifacts:
+      - name: email-detected
+        path: /tmp/email_detected.txt

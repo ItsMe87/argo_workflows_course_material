@@ -1,0 +1,36 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: wf-recursion-
+spec:
+  entrypoint: dag-template
+  templates:
+  - name: dag-template
+    dag:
+      tasks:
+      - name: roll-dice
+        template: task-roll-dice
+      - name: six
+        template: task-six
+        depends: roll-dice.Succeeded
+        when: "{{tasks.roll-dice.outputs.result}} == 6"
+      - name: not-six
+        template: dag-template
+        depends: roll-dice.Succeeded
+        when: "{{tasks.roll-dice.outputs.result}} != 6"
+
+  - name: task-roll-dice
+    script:
+      image: python:3.8-slim
+      command: [python]
+      source: |
+        import random
+        number = random.randint(1,6)
+        print(number)
+
+  - name: task-six
+    script:
+      image: python:3.8-slim
+      command: [python]
+      source: |
+        print("Hurra... a 6.")  

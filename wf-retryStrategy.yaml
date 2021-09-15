@@ -1,0 +1,51 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: wf-retrystrategy-
+spec:
+  entrypoint: dag-template
+  arguments:
+    parameters:
+    - name: messageA
+      value: A
+  templates:
+  - name: dag-template
+    inputs:
+      parameters:
+      - name: messageA
+    dag:
+      tasks:
+      - name: Task1
+        arguments:
+          parameters: [{name: text, value: "{{inputs.parameters.messageA}}" }]
+        template: task-decision
+      - name: TaskA
+        template: task-A
+        depends: Task1.Succeeded
+        when: "{{tasks.Task1.outputs.result}} == A"
+        
+    
+  - name: task-decision
+    inputs:
+      parameters:
+      - name: text
+    script:
+      image: python:3.8-slim
+      command: [python]
+      source: |
+        p = "{{inputs.parameters.text}}"
+        print(p)
+
+  - name: task-A
+    retryStrategy:
+      limit: 10
+      retryPolicy: "Always"
+      backoff:
+        duration: "1"
+        factor: 2
+        maxDuration: "1m"
+    script:
+      image: python:3.8-slim
+      command: [python]
+      source: |
+        print("Task A was executed.)
